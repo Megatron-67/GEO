@@ -341,14 +341,47 @@ async function locateMe() {
 
 async function doFetch(ip) {
   setLoading();
+  // ipwho.is — free, no key, full CORS support
   const url = ip
-    ? `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,query,continent,continentCode,country,countryCode,regionName,region,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,reverse,mobile,proxy,hosting`
-    : `https://ip-api.com/json/?fields=status,message,query,continent,continentCode,country,countryCode,regionName,region,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,reverse,mobile,proxy,hosting`;
+    ? `https://ipwho.is/${encodeURIComponent(ip)}`
+    : `https://ipwho.is/`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error();
-    const d = await res.json();
-    if (d.status === 'fail') { showError(d.message || 'Lookup failed. Check the IP address.'); return; }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const raw = await res.json();
+
+    if (!raw.success) {
+      showError(raw.message || 'Lookup failed. Please check the IP address and try again.');
+      return;
+    }
+
+    // Normalise ipwho.is response to match our render format
+    const d = {
+      query:       raw.ip,
+      continent:   raw.continent,
+      continentCode: raw.continent_code,
+      country:     raw.country,
+      countryCode: raw.country_code,
+      regionName:  raw.region,
+      region:      raw.region_code,
+      city:        raw.city,
+      district:    raw.district || '—',
+      zip:         raw.postal,
+      lat:         raw.latitude,
+      lon:         raw.longitude,
+      timezone:    raw.timezone?.id,
+      offset:      raw.timezone?.offset ?? 0,
+      currency:    raw.currency?.code ? `${raw.currency.code} (${raw.currency.symbol || ''})` : '—',
+      isp:         raw.connection?.isp,
+      org:         raw.connection?.org,
+      as:          raw.connection?.asn ? `AS${raw.connection.asn}` : '—',
+      asname:      raw.connection?.domain || '—',
+      reverse:     '—',
+      mobile:      raw.type === 'mobile',
+      proxy:       raw.security?.proxy || false,
+      hosting:     raw.security?.hosting || false,
+    };
+
     currentData = d;
     renderResults(d);
     placeMarker(d);
@@ -356,7 +389,7 @@ async function doFetch(ip) {
     if (!ip) document.getElementById('ipInput').value = d.query;
     document.getElementById('trackBtn').disabled = false;
   } catch(e) {
-    showError('Could not reach ip-api.com. Check your internet connection.');
+    showError('Lookup failed: ' + (e.message || 'Unknown error') + '. Try saving this file locally and opening it in your browser for full functionality.');
   }
 }
 
